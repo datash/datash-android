@@ -1,0 +1,3 @@
+function ping() {
+    Android.ping();
+}

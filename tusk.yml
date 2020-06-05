@@ -1,0 +1,13 @@
+tasks:
+  setup:
+    run:
+      - command: brew install pidcat
+  log:
+    run:
+      - command: pidcat -c io.rousan.datash
+  log:d:
+    args:
+      device:
+        usage: The device serial number
+    run:
+      - command: pidcat -s ${device} -c io.rousan.datash
