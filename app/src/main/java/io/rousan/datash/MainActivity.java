@@ -24,7 +24,12 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.util.Base64;
 import android.view.View;
+import android.view.ViewGroup;
+import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.widget.FrameLayout;
+import android.widget.TextView;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
@@ -56,8 +61,26 @@ public class MainActivity extends AppCompatActivity implements AdvancedWebView.L
         worker = Executors.newFixedThreadPool(2);
 
         webView = findViewById(R.id.webview);
-
+        webView.addPermittedHostname("datash.co");
         webView.addJavascriptInterface(new JavaScriptInterface(this), "Android");
+
+        final TextView progress_tv = findViewById(R.id.tv_progress);
+        final FrameLayout root = findViewById(R.id.root);
+        final View webViewContainer = findViewById(R.id.webview_container);
+        webView.setWebChromeClient(new WebChromeClient() {
+            public void onProgressChanged(WebView view, final int progress) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        progress_tv.setText(String.format(Locale.ENGLISH, "Loading... %d%%", progress));
+
+                        if (progress == 100) {
+                            root.bringChildToFront(webViewContainer);
+                        }
+                    }
+                });
+            }
+        });
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -288,29 +311,14 @@ public class MainActivity extends AppCompatActivity implements AdvancedWebView.L
 
     @Override
     public void onDownloadRequested(String url, String suggestedFilename, String mimeType, long contentLength, String contentDisposition, String userAgent) {
-        Timber.d("Download request: %s", suggestedFilename);
-
-//        try {
-//            if (AdvancedWebView.handleDownload(this, url, suggestedFilename)) {
-//                showSnackbar(String.format("%s is downloaded", suggestedFilename), true);
-//            } else {
-//                showSnackbar("Couldn't download the file", false);
-//            }
-//        } catch (Exception exp) {
-//            showSnackbar(String.format("Couldn't download the file: %s", exp), false);
-//        }
-
-
-//        webView.evaluateJavascript(String.format("javascript:noop(\"%s\")", "Hi"), new ValueCallback<String>() {
-//            @Override
-//            public void onReceiveValue(String value) {
-//                Timber.d(value);
-//            }
-//        });
     }
 
     @Override
     public void onExternalPageRequest(String url) {
-        Timber.d("onExternalPageRequest");
+        Timber.d("onExternalPageRequest: %s", url);
+
+        Intent intent = new Intent(Intent.ACTION_VIEW);
+        intent.setData(Uri.parse(url));
+        startActivity(intent);
     }
 }
