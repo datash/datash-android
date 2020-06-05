@@ -8,6 +8,7 @@ import im.delight.android.webview.AdvancedWebView;
 import timber.log.Timber;
 
 import com.google.android.material.snackbar.Snackbar;
+import com.google.common.io.ByteStreams;
 import com.karumi.dexter.Dexter;
 import com.karumi.dexter.listener.DexterError;
 import com.karumi.dexter.listener.PermissionRequestErrorListener;
@@ -17,14 +18,18 @@ import com.karumi.dexter.listener.multi.MultiplePermissionsListener;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.PendingIntent;
+import android.content.ContentResolver;
 import android.content.Intent;
+import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.OpenableColumns;
 import android.util.Base64;
 import android.view.View;
-import android.view.ViewGroup;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -36,10 +41,9 @@ import org.apache.commons.io.FilenameUtils;
 
 import java.io.File;
 import java.io.InputStream;
-import java.lang.reflect.Array;
-import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -166,6 +170,115 @@ public class MainActivity extends AppCompatActivity implements AdvancedWebView.L
                 .check();
     }
 
+    public void onWebAppMount() {
+        final Intent intent = getIntent();
+
+        worker.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (Intent.ACTION_SEND.equals(intent.getAction())) {
+                        if ("text/plain".equals(intent.getType())) {
+                            final String sharedText = intent.getStringExtra(Intent.EXTRA_TEXT);
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    if (sharedText != null) {
+                                        webView.evaluateJavascript(String.format(
+                                                "(function() { window.onReceiveTextFromAndroidShare(`%s`); })();",
+                                                Base64.encodeToString(sharedText.getBytes(StandardCharsets.UTF_8), Base64.DEFAULT)
+                                        ), null);
+                                    } else {
+                                        showSnackbar("No text to share", false);
+                                    }
+                                }
+                            });
+                        } else {
+                            Uri fileUri = (Uri) intent.getParcelableExtra(Intent.EXTRA_STREAM);
+                            if (fileUri != null) {
+                                Timber.d("URI: %s", fileUri.toString());
+                                shareFileUriToWebView(fileUri);
+                            } else {
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        showSnackbar("No file to share", false);
+                                    }
+                                });
+                            }
+                        }
+                    } else if (Intent.ACTION_SEND_MULTIPLE.equals(intent.getAction())) {
+                        ArrayList<Uri> fileUris = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+                        if (fileUris != null) {
+                            Timber.d("URI: %s", fileUris.toString());
+                            for (Uri fileUri : fileUris) {
+                                shareFileUriToWebView(fileUri);
+                            }
+                        } else {
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    showSnackbar("No file to share", false);
+                                }
+                            });
+                        }
+                    }
+                } catch (final Exception exp) {
+                    Timber.d(exp);
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            showSnackbar(exp.getMessage(), false);
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    private void shareFileUriToWebView(Uri file) {
+        try {
+            ContentResolver contentResolver = getContentResolver();
+            String mimeType = contentResolver.getType(file);
+
+            Cursor returnCursor = contentResolver.query(file, null, null, null, null);
+            int nameIndex = returnCursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+            returnCursor.moveToFirst();
+            String fileName = returnCursor.getString(nameIndex);
+            returnCursor.close();
+
+            InputStream inputStream = contentResolver.openInputStream(file);
+            byte[] data = ByteStreams.toByteArray(inputStream);
+            inputStream.close();
+
+            final String base64Name = Base64.encodeToString(fileName.getBytes(StandardCharsets.UTF_8), Base64.DEFAULT);
+            final String base64Type = Base64.encodeToString(mimeType.getBytes(StandardCharsets.UTF_8), Base64.DEFAULT);
+            final String base64Data = Base64.encodeToString(data, Base64.DEFAULT);
+
+            Timber.d("File: %s", fileName);
+
+            new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    webView.evaluateJavascript(String.format(
+                            "(function() { window.onReceiveFileFromAndroidShare(`%s`, `%s`, `%s`); })();",
+                            base64Name,
+                            base64Type,
+                            base64Data
+                    ), null);
+                }
+            }, 1000);
+        } catch (final Exception exp) {
+            Timber.d(exp);
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    showSnackbar(exp.getMessage(), false);
+                }
+            });
+        }
+    }
+
     public void onStartFileDownload(String refId, String fromId, String fileName, long size, String mimeType) {
         Timber.d("onStartFileDownload: %s %s %s %d", refId, fromId, fileName, size);
 
@@ -189,7 +302,7 @@ public class MainActivity extends AppCompatActivity implements AdvancedWebView.L
     }
 
     public void onCompleteFileDownload(final String refId, final String base64Data) {
-        Timber.d("onCompleteFileDownload: %s %s", refId, base64Data);
+        Timber.d("onCompleteFileDownload: %s", refId);
 
         final HashMap<String, String> attr = fileDownloadsMap.get(refId);
         worker.execute(new Runnable() {

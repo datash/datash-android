@@ -16,12 +16,32 @@ public class JavaScriptInterface {
     }
 
     @JavascriptInterface
-    public void onStartFileDownload(String refId, String fromId, String fileName, String size, String mimeType) {
-        mainActivity.onStartFileDownload(refId, fromId, fileName, Long.parseLong(size), mimeType);
+    public void onStartFileDownload(final String refId, final String fromId, final String fileName, final String size, final String mimeType) {
+        mainActivity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                mainActivity.onStartFileDownload(refId, fromId, fileName, Long.parseLong(size), mimeType);
+            }
+        });
     }
 
     @JavascriptInterface
-    public void onCompleteFileDownload(String refId, String base64Data) {
-        mainActivity.onCompleteFileDownload(refId, base64Data);
+    public void onCompleteFileDownload(final String refId, final String base64Data) {
+        mainActivity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                mainActivity.onCompleteFileDownload(refId, base64Data);
+            }
+        });
+    }
+
+    @JavascriptInterface
+    public void onWebAppMount() {
+        mainActivity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                mainActivity.onWebAppMount();
+            }
+        });
     }
 }
