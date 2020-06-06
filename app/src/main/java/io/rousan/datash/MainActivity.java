@@ -373,7 +373,7 @@ public class MainActivity extends AppCompatActivity implements AdvancedWebView.L
                             NotificationManagerCompat notificationManager = NotificationManagerCompat.from(MainActivity.this);
                             notificationManager.notify(refId.hashCode(), builder.build());
 
-                            showSnackbar(String.format("Download complete: %s", outputFile.getName()), true);
+                            startActivity((Intent) openFileIntent.clone());
                         }
                     });
                 } catch (Exception exp) {
