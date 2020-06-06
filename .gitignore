@@ -13,3 +13,4 @@
 .externalNativeBuild
 .cxx
 /app/release/
+/keys/private_key.pepk
